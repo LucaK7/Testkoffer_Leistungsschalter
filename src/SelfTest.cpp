@@ -1,130 +1,195 @@
-#include "SelfTest.h"
-#include "StateManager.h"
-#include "Shell.h"
+/* ============================================================================
+   Datei:   SelfTest.cpp
+   Projekt: SE Testkoffer – Steuerung (Grundaufbau) V55
+   ============================================================================
+   Ablauf (Zustandsautomat, ein Schritt pro update()-Aufruf):
 
-void SelfTest::begin(StateManager* state, Shell* shell)
+     für jeden Ausgang MN/MX2, MX, XF, MCH
+       für jede Spannung 24 V, 48 V, 230 V
+         SWITCH_ON : Spannung setzen, Einschalten anfordern
+         WAIT_ON   : warten bis StateManager das Relais eingeschaltet hat
+                     (Sicherheitspause 200 ms), max. 2 s
+         HOLD_ON   : 400 ms eingeschaltet lassen
+         PAUSE     : ausschalten, 300 ms warten
+   Danach: alles aus, Ansicht bleibt MTZ/NW/NT.
+   ============================================================================ */
+
+#include "SelfTest.h"
+#include "Config.h"
+
+SelfTest::SelfTest(StateManager& state)
+    : _state(state)
 {
-    _state = state;
-    _shell = shell;
 }
 
-void SelfTest::start()
+/* ----------------------------------------------------------------------------
+   requestStart()
+   Öffnet ein Zeitfenster von 10 s, in dem der Start bestätigt werden kann.
+   ---------------------------------------------------------------------------- */
+void SelfTest::requestStart()
 {
-    if (_running) return;
-
-    _state->allOff();
-
-    _running = true;
-    _out  = OUT_MN_MX2;
-    _mode = MODE_24V;
-
-    _phase = SET_MODE;
-    _phaseStartMs = millis();
-
-    if (_shell)
+    if (isRunning())
     {
-        Serial.println();
-        Serial.println("-----------------------------------------------");
-        Serial.println("-----------------------------------------------");
-        Serial.print("SelfTest - Stautstabelle");
-        _shell->printTableHeader();
+        return;
     }
+    _confirmUntil = millis() + Timing::SELFTEST_CONFIRM_MS;
+    if (_confirmUntil == 0) _confirmUntil = 1;   // 0 bedeutet «keine Anforderung»
+}
+
+bool SelfTest::isAwaitingConfirm() const
+{
+    return (_confirmUntil != 0) && (static_cast<int32_t>(_confirmUntil - millis()) > 0);
+}
+
+/* ----------------------------------------------------------------------------
+   confirmStart()
+   Startet den Test, wenn eine gültige Anforderung offen ist und keine
+   Störung vorliegt. Der Test läuft immer in der Ansicht MTZ/NW/NT, damit
+   die NSX-Kopplung die einzelnen Schritte nicht beeinflusst. Die
+   Bestätigung «Prüfling und Testkabel abgehängt» ersetzt die Auswahl des
+   Prüfkabels (R8); nach dem Test muss das Kabel neu gewählt werden.
+   ---------------------------------------------------------------------------- */
+bool SelfTest::confirmStart()
+{
+    if (!isAwaitingConfirm() || isRunning() || _state.isFault())
+    {
+        _confirmUntil = 0;
+        return false;
+    }
+    _confirmUntil = 0;
+
+    _state.chooseView(View::MTZ_NW_NT);   // alles AUS, 24 V, Einschalten frei
+
+    _out          = 0;
+    _voltage      = 0;
+    _phase        = Phase::SWITCH_ON;
+    _phaseStartMs = millis();
+    report("Selbsttest gestartet");
+    return true;
 }
 
 void SelfTest::stop()
 {
-    if (!_running) return;
-
-    _state->allOff();
-
-    Serial.println("-----------------------------------------------");
-    Serial.println("SelfTest beendet");
-    Serial.println();
-    _running = false;
-    _phase = IDLE;
+    _confirmUntil = 0;
+    if (isRunning())
+    {
+        finish("Selbsttest abgebrochen");
+    }
 }
-    
+
+/* ----------------------------------------------------------------------------
+   update()
+   ---------------------------------------------------------------------------- */
 void SelfTest::update()
 {
-    if (!_running) return;
+    // Abgelaufene Startanforderung verwerfen
+    if (_confirmUntil != 0 && !isAwaitingConfirm())
+    {
+        _confirmUntil = 0;
+    }
 
-    uint32_t now = millis();
+    if (!isRunning())
+    {
+        return;
+    }
+
+    // Störung: sofort abbrechen (StateManager hat bereits alles ausgeschaltet)
+    if (_state.isFault())
+    {
+        finish("Selbsttest abgebrochen: I/O-Stoerung");
+        return;
+    }
+
+    const uint32_t now     = millis();
+    const uint32_t elapsed = now - _phaseStartMs;
 
     switch (_phase)
     {
-        case SET_MODE:
-            _state->setMode(_out, _mode);
+        case Phase::SWITCH_ON:
+        {
+            _state.setVoltage(_out, voltageFromIndex(_voltage));
+            _state.requestOn(_out);
+
+            char text[64];
+            snprintf(text, sizeof(text), "%-3s %-6s %s EIN",
+                     relayPin(_out, voltageFromIndex(_voltage)).name,
+                     outputLabel(View::MTZ_NW_NT, _out).code,
+                     voltageName(voltageFromIndex(_voltage)));
+            report(text);
+
+            _phase        = Phase::WAIT_ON;
             _phaseStartMs = now;
-            _phase = WAIT_SAFETY;
+            break;
+        }
+
+        case Phase::WAIT_ON:
+            if (_state.isOn(_out))
+            {
+                _phase        = Phase::HOLD_ON;
+                _phaseStartMs = now;
+            }
+            else if (elapsed > 2000)
+            {
+                finish("Selbsttest abgebrochen: Ausgang schaltet nicht ein");
+            }
             break;
 
-        case WAIT_SAFETY:
-            if (now - _phaseStartMs >= SAFETY_DELAY_MS)
-                _phase = TURN_ON;
+        case Phase::HOLD_ON:
+            if (elapsed >= Timing::SELFTEST_ON_MS)
+            {
+                _state.requestOff(_out);
+                _phase        = Phase::PAUSE;
+                _phaseStartMs = now;
+            }
             break;
 
-        case TURN_ON:
-            _state->turnOn(_out);
-            _phaseStartMs = now;
-
-            if (_shell)
-                _shell->printTableRow(_out);
-
-            _phase = WAIT_ACTIVE;
+        case Phase::PAUSE:
+            if (elapsed >= Timing::SELFTEST_PAUSE_MS)
+            {
+                next();
+            }
             break;
 
-        case WAIT_ACTIVE:
-            if (now - _phaseStartMs >= SELFTEST_MODE_ACTIVE_MS)
-                _phase = TURN_OFF;
-            break;
-
-        case TURN_OFF:
-            _state->turnOff(_out);
-            _phaseStartMs = now;
-
-            if (_shell)
-                _shell->printTableRow(_out);
-
-            _phase = WAIT_PAUSE;
-            break;
-
-        case WAIT_PAUSE:
-            if (now - _phaseStartMs >= SELFTEST_STEP_PAUSE_MS)
-                nextMode();
-            break;
-
-        case DONE:
-            stop();
-            break;
-
+        case Phase::IDLE:
         default:
             break;
     }
 }
 
-void SelfTest::nextMode()
+/* ----------------------------------------------------------------------------
+   next()
+   Nächste Spannung, danach nächster Ausgang, danach Ende.
+   ---------------------------------------------------------------------------- */
+void SelfTest::next()
 {
-    int m = (int)_mode + 1;
-    if (m < MODE_COUNT)
+    _voltage++;
+    if (_voltage >= VOLTAGE_COUNT)
     {
-        _mode = (OutputMode)m;
-        _phase = SET_MODE;
+        _voltage = 0;
+        _out++;
+    }
+
+    if (_out >= OUTPUT_COUNT)
+    {
+        finish("Selbsttest beendet: alle 12 Relais geschaltet");
         return;
     }
-    _shell->printTableFooter();
-    nextOutput();
+
+    _phase        = Phase::SWITCH_ON;
+    _phaseStartMs = millis();
 }
 
-void SelfTest::nextOutput()
+void SelfTest::finish(const char* text)
 {
-    int o = (int)_out + 1;
-    if (o < OUTPUT_COUNT)
-    {
-        _out = (OutputID)o;
-        _mode = MODE_24V;
-        _phase = SET_MODE;
-        return;
-    }
-    
-    _phase = DONE;
+    _phase = Phase::IDLE;
+    _state.requireCableConfirmation();    // alles AUS, Prüfkabel neu wählen (R8)
+    _state.setVoltageAll(Voltage::V24);   // definierter Zustand nach dem Test
+    report(text);
+}
+
+void SelfTest::report(const char* text)
+{
+    strncpy(_stepText, text, sizeof(_stepText) - 1);
+    _stepText[sizeof(_stepText) - 1] = '\0';
+    _stepId++;
 }

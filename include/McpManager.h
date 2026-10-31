@@ -1,107 +1,109 @@
-#pragma once
-
 /* ============================================================================
-   Datei: McpManager.h
+   Datei:   McpManager.h
+   Projekt: SE Testkoffer – Steuerung (Grundaufbau) V55
+   ============================================================================
+   Rolle im Gesamtsystem
+   ----------------------------------------------------------------------------
+   Hardwarenahe Schicht für die beiden Portexpander MCP23008 (-A2 = U15, -A3 = U16),
+   die über die Treiber ULN2803 (-A5 = U19, -A6 = U20) und die Klemmen
+   J9–J12 die Relais -K1 … -K12 schalten.
+   Der McpManager ist die EINZIGE Stelle im Programm, die auf den I²C-Bus
+   zugreift.
 
-   Funktion:
-   ---------
-   Hardware-Abstraktion für zwei Adafruit MCP23008 I/O-Expander.
-   Diese Klasse ist die EINZIGE Stelle im Projekt, die direkt
-   MCP-Pins beschreibt.
+   Zuständigkeiten
+   ----------------------------------------------------------------------------
+   - Bus starten und beide Bausteine in einen sicheren Zustand versetzen
+     (alle Pins Ausgang, alle Relais aus)
+   - Einen vorgegebenen Sollzustand schreiben und durch Zurücklesen prüfen
+   - Zyklische Kontrolle: Stimmen die Register noch mit dem Sollzustand?
+   - Selbstständige Reparatur nach einer Störung (Bus freitakten,
+     Bausteine neu initialisieren, Sollzustand neu schreiben)
+   - Fehlerstatistik für Shell und Display
 
-   WICHTIGE GRUNDSÄTZE:
-   -------------------
-   👉 Keine Zustandslogik (kein Merken von Modus / Ein / Aus)
-   👉 Keine Timing- oder Safety-Logik
-   👉 Kein Wissen über Shell, StateManager oder SelfTest
-   👉 Schreibt IMMER deterministisch alle relevanten Pins
+   Funktionsprinzip (warum so?)
+   ----------------------------------------------------------------------------
+   Beim Schalten von 230 VAC können Störimpulse den I²C-Bus verfälschen oder
+   einen MCP23008 zurücksetzen (danach sind alle Pins Eingänge und kein
+   Relais schaltet mehr). Deshalb gilt:
+     1. Der Sollzustand wird im Speicher geführt (_target) und pro Baustein
+        immer als ganzes Byte in EINEM Zugriff geschrieben. Es wird nie ein
+        Wert gelesen, verändert und zurückgeschrieben – ein falsch gelesener
+        Wert kann so keine Relais einschalten.
+     2. Jeder Schreibzugriff wird durch Zurücklesen von IODIR und OLAT
+        bestätigt.
+     3. Weicht etwas ab, wird repariert. Gelingt das nicht, meldet die
+        Funktion FAILED und der StateManager schaltet alles aus.
+     4. Vor jedem Schreiben wird anhand der Tabelle relayPin() geprüft, dass
+        pro Ausgang höchstens ein Relais aktiv ist und unbelegte Pins LOW
+        bleiben (letzte Schutzschicht gegen Programmierfehler).
 
-   KONZEPT:
-   --------
-   - Jeder logische Ausgang besteht aus 4 Pins (MODE_24V..MODE_CUSTOM)
-   - Beim Ausschalten werden IMMER alle 4 Pins LOW gesetzt
-   - Beim Einschalten werden ALLE 4 Pins geschrieben:
-       - gewünschter Modus = HIGH
-       - alle anderen Modi = LOW
-   - Dadurch: kein Flackern, kein undefinierter Zustand
-
-   ABHÄNGIGKEITEN:
-   ---------------
-   - Outputs.h (OutputID, OutputMode, MODE_COUNT, OUTPUT_COUNT)
-   - Adafruit MCP23008 Library
-
+   Wichtige Hinweise
+   ----------------------------------------------------------------------------
+   - Keine Logik über Ausgänge, Ansichten oder Verriegelungen – das ist
+     Aufgabe des StateManagers.
+   - Keine Ausgaben auf Serial; Ereignisse werden über lastEvent()/eventId()
+     bereitgestellt und von der Shell ausgegeben.
    ============================================================================ */
 
+#pragma once
 #include <Arduino.h>
-#include <Adafruit_MCP23008.h>
-#include "Outputs.h"
 
 class McpManager
 {
 public:
-    /* ------------------------------------------------------------------------
-       Initialisierung
-       ------------------------------------------------------------------------
-       Beschreibung:
-       - Initialisiert beide MCP23008 (0x20, 0x21)
-       - Setzt alle Pins als OUTPUT
-       - Schaltet beim Start ALLE Pins LOW (Hard-Reset-Zustand)
-       ------------------------------------------------------------------------ */
-    void begin();
+    // Ergebnis eines Schreib- oder Kontrollvorgangs
+    enum class Result : uint8_t
+    {
+        OK,         // alles in Ordnung
+        REPAIRED,   // Abweichung erkannt und erfolgreich behoben
+        FAILED      // Baustein nicht erreichbar bzw. nicht reparierbar
+    };
 
-    /* ------------------------------------------------------------------------
-       Alle Ausgänge ausschalten (Global)
-       ------------------------------------------------------------------------
-       Beschreibung:
-       - Schaltet ALLE Pins beider MCPs LOW
-       - Wird typischerweise beim Systemstart verwendet
-       - Keine Rücksicht auf Modi oder Logik
-       ------------------------------------------------------------------------ */
-    void allOutputsOff();
+    // Bus starten und beide MCP23008 mit «alle Relais aus» initialisieren.
+    // Gibt true zurück, wenn beide Bausteine korrekt antworten.
+    bool begin();
 
-    /* ------------------------------------------------------------------------
-       Ausgang einschalten (mit Modus)
-       ------------------------------------------------------------------------
-       Beschreibung:
-       - Schaltet GENAU EINEN Modus eines Ausgangs ein
-       - Alle anderen Modi dieses Ausgangs werden explizit ausgeschaltet
-       - Andere Ausgänge bleiben unverändert
+    // Sollzustand schreiben. bitsA2 gehört zum MCP -A2/U15 (0x20, J9/J10),
+    // bitsA3 zum MCP -A3/U16 (0x21, J11/J12). Bit n = GPn.
+    Result writeOutputs(uint8_t bitsA2, uint8_t bitsA3);
 
-       Ablauf:
-       1) Alle 4 Pins dieses Ausgangs auf LOW
-       2) Gewählten Modus-Pin auf HIGH
-       ------------------------------------------------------------------------ */
-    void enableOutput(OutputID output, OutputMode mode);
+    // Zyklische Kontrolle: Register zurücklesen und mit Sollzustand vergleichen.
+    Result check();
 
-    /* ------------------------------------------------------------------------
-       Ausgang ausschalten
-       ------------------------------------------------------------------------
-       Beschreibung:
-       - Schaltet ALLE 4 Pins des angegebenen Ausgangs LOW
-       - Andere Ausgänge bleiben unverändert
-       ------------------------------------------------------------------------ */
-    void disableOutput(OutputID output);
+    // Prüft einen Sollzustand: pro Ausgang höchstens ein Relais EIN und
+    // keine Pins gesetzt, die laut relayPin() keinem Relais zugeordnet sind.
+    static bool isPlausible(uint8_t bitsA2, uint8_t bitsA3);
+
+    // --- Abfragen für Shell und Display -------------------------------------
+    bool        isHealthy()    const { return _healthy; }
+    uint32_t    errorCount()   const { return _errorCount; }    // erkannte Abweichungen/Busfehler
+    uint32_t    repairCount()  const { return _repairCount; }   // erfolgreiche Reparaturen
+    uint32_t    eventId()      const { return _eventId; }       // zählt bei jedem neuen Ereignis hoch
+    const char* lastEvent()    const { return _lastEvent; }     // Klartext des letzten Ereignisses
+    void        resetStatistics();
 
 private:
-    /* MCP-Instanzen */
-    Adafruit_MCP23008 _mcp1;
-    Adafruit_MCP23008 _mcp2;
+    // Einzelne Registerzugriffe (je ein I²C-Telegramm), mit Fehlerprüfung
+    bool writeRegister(uint8_t addr, uint8_t reg, uint8_t value);
+    bool readRegister(uint8_t addr, uint8_t reg, uint8_t& value);
 
-    /* ------------------------------------------------------------------------
-       Pin-Auflösung
-       ------------------------------------------------------------------------
-       Beschreibung:
-       - Ordnet einem logischen Ausgang + Modus
-         den korrekten MCP und Pin zu
+    // Baustein vollständig konfigurieren bzw. seinen Zustand prüfen
+    bool initChip(uint8_t addr, uint8_t olat);
+    bool verifyChip(uint8_t addr, uint8_t expectedOlat);
+    bool verifyAll();
 
-       Mapping:
-       - OUT_MN_MX2 / OUT_MX  → MCP1
-       - OUT_XF     / OUT_MCH → MCP2
-       - Jeder Ausgang belegt 4 Pins (MODE_24V..MODE_CUSTOM)
+    // Störungsbehandlung
+    Result handleDeviation(const char* reason);
+    bool   repair();
+    void   recoverBus();
+    void   startBus();
 
-       Rückgabe:
-       - pin       → MCP-Pin 0..7
-       - useMcp1   → true = MCP1, false = MCP2
-       ------------------------------------------------------------------------ */
-    uint8_t resolvePin(OutputID output, OutputMode mode, bool& useMcp1);
+    void   logEvent(const char* text);
+
+    uint8_t  _target[2]   = { 0x00, 0x00 };   // Sollzustand -A2, -A3 (0x00 = alle Relais aus)
+    bool     _healthy     = false;
+    uint32_t _errorCount  = 0;
+    uint32_t _repairCount = 0;
+    uint32_t _eventId     = 0;
+    char     _lastEvent[64] = "";
 };
