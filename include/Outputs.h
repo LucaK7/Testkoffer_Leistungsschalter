@@ -1,35 +1,6 @@
-/*
- * ====================================================
- * 📄 Dateiname: Outputs.h
- * ====================================================
- *
- * 🎯 Funktion der Datei:
- * Zentrale und EINZIGE Definitionsstelle für:
- * - Logische Ausgänge
- * - Betriebsmodi
- * - Namen für Debug & UI
- *
- * ⚠️ Wichtige Infos:
- * - KEINE Hardwarekenntnis
- * - KEINE Logik
- * - KEINE Seiteneffekte
- *
- * 🧠 Konzept & Überlegungen:
- * - Änderungen hier sollen das Projekt NICHT zerstören
- * - Trennung von Identität (ID) und Bedeutung (Name)
- * - Grundlage für SerialShell & Web-GUI
- *
- * ====================================================
- */
+#pragma once
 
-#ifndef OUTPUTS_H
-#define OUTPUTS_H
-
-#include <Arduino.h>
-
-/* 🔌 Logische Ausgänge
- * Reihenfolge ist systemweit verbindlich
- */
+/* 🔌 Logische Ausgänge */
 enum OutputID
 {
     OUT_MN_MX2 = 0,
@@ -39,9 +10,7 @@ enum OutputID
     OUTPUT_COUNT
 };
 
-/* ⚡ Betriebsmodi pro Ausgang
- * Jeder Modus entspricht GENAU EINEM Pin
- */
+/* ⚙️ Betriebsmodi */
 enum OutputMode
 {
     MODE_24V = 0,
@@ -51,49 +20,54 @@ enum OutputMode
     MODE_COUNT
 };
 
-/*
- * 📌 Beschreibung:
- * Liefert den Namen eines logischen Ausgangs.
- *
- * ⚙️ Funktion:
- * - Wird ausschließlich für Anzeigen genutzt
- *
- * 🔁 Ablauf:
- * - Switch über OutputID
- * - Rückgabe eines konstanten Strings
- */
-static inline const char* getOutputName(OutputID id)
+/* 📛 Lange Namen */
+inline const char* getOutputName(OutputID id)
 {
-    switch (id)
+    static const char* names[] =
     {
-        case OUT_MN_MX2: return "OUT_MN_MX2";
-        case OUT_MX:     return "OUT_MX";
-        case OUT_XF:     return "OUT_XF";
-        case OUT_MCH:    return "OUT_MCH";
-        default:         return "UNKNOWN_OUTPUT";
-    }
+        "MN/MX2",
+        "MX",
+        "XF",
+        "MCH"
+    };
+    return names[id];
 }
 
-/*
- * 📌 Beschreibung:
- * Liefert den Namen eines Modus.
- *
- * ⚙️ Funktion:
- * - Einheitliche Textdarstellung
- *
- * 🔁 Ablauf:
- * - Switch über OutputMode
- */
-static inline const char* getModeName(OutputMode mode)
+/* 🔤 Kurznamen (für Shell) */
+inline const char* getOutputShortName(OutputID id)
 {
-    switch (mode)
+    static const char* names[] =
     {
-        case MODE_24V:    return "24V";
-        case MODE_48V:    return "48V";
-        case MODE_230V:   return "230V";
-        case MODE_CUSTOM: return "CUSTOM";
-        default:          return "UNKNOWN_MODE";
-    }
+        "mn",
+        "mx",
+        "xf",
+        "mch"
+    };
+    return names[id];
 }
 
-#endif
+/* 📛 Modusnamen */
+inline const char* getModeName(OutputMode mode)
+{
+    static const char* names[] =
+    {
+        "24V",
+        "48V",
+        "230V",
+        "Custom"
+    };
+    return names[mode];
+}
+
+/* 🔤 Modus-Abkürzungen (für Shell) */
+inline const char* getModeShortName(OutputMode mode)
+{
+    static const char* names[] =
+    {
+        "24",
+        "48",
+        "230",
+        "cust"
+    };
+    return names[mode];
+}

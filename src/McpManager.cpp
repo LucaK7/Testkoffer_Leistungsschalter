@@ -1,38 +1,15 @@
-/*
- * ====================================================
- * 📄 Dateiname: McpManager.cpp
- * ====================================================
- *
- * 🎯 Funktion der Datei:
- * Implementierung der MCP23008-Hardwareabstraktion.
- *
- * 🧠 Konzept & Überlegungen:
- * - Jeder Pin wird einzeln geschrieben
- * - Keine unnötigen MCP-Zugriffe
- * - Maximale Kontrolle & Sicherheit
- *
- * ====================================================
- */
-
 #include "McpManager.h"
 
-/*
- * 📌 Beschreibung:
- * Initialisiert beide MCPs in einen sicheren Zustand.
- *
- * ⚙️ Funktion:
- * - Verhindert undefinierte Pegel beim Start
- *
- * 🔁 Ablauf:
- * - MCPs starten
- * - Alle Pins OUTPUT
- * - Alle Pins LOW
- */
+/* ============================================================================
+   Initialisierung der MCPs
+   ============================================================================ */
 void McpManager::begin()
 {
+    /* MCP-Adressen */
     _mcp1.begin(0x20);
     _mcp2.begin(0x21);
 
+    /* Alle Pins als OUTPUT setzen und LOW schalten */
     for (uint8_t i = 0; i < 8; i++)
     {
         _mcp1.pinMode(i, OUTPUT);
@@ -43,81 +20,63 @@ void McpManager::begin()
     }
 }
 
-/*
- * 📌 Beschreibung:
- * Schaltet alle Pins eines Ausgangs aus.
- *
- * ⚙️ Funktion:
- * - Garantiert spannungsfreien Zustand
- *
- * 🔁 Ablauf:
- * - Iteration über alle 4 Modus-Pins
- */
-void McpManager::allPinsOff(OutputID output)
+/* ============================================================================
+   Alle Ausgänge ausschalten (Global)
+   ============================================================================ */
+void McpManager::allOutputsOff()
 {
-    for (uint8_t pin = 0; pin < 4; pin++)
+    /* Beide MCPs vollständig auf LOW setzen */
+    for (uint8_t i = 0; i < 8; i++)
     {
-        McpManager::setPin(output, pin, false);
+        _mcp1.digitalWrite(i, LOW);
+        _mcp2.digitalWrite(i, LOW);
     }
 }
 
-/*
- * 📌 Beschreibung:
- * Setzt den Modus-Pin eines Ausgangs.
- *
- * ⚙️ Funktion:
- * - Aktiviert GENAU einen Pin
- *
- * 🔁 Ablauf:
- * - Modus → Pinindex
- * - Weitergabe an setPin()
- */
-void McpManager::setModePin(OutputID output, OutputMode mode, bool state)
+/* ============================================================================
+   Ausgang einschalten
+   ============================================================================ */
+void McpManager::enableOutput(OutputID output, OutputMode mode)
 {
-    McpManager::setPin(output, (uint8_t)mode, state);
+    /* Sicherheitsregel:
+       Immer zuerst ALLE Pins dieses Ausgangs ausschalten */
+    disableOutput(output);
+
+    /* Gewünschten Modus aktivieren */
+    bool useMcp1;
+    uint8_t pin = resolvePin(output, mode, useMcp1);
+
+    (useMcp1 ? _mcp1 : _mcp2).digitalWrite(pin, HIGH);
 }
 
-/*
- * 📌 Beschreibung:
- * Setzt einen einzelnen MCP-Pin.
- *
- * ⚙️ Funktion:
- * - Physischer Schreibzugriff
- *
- * 🔁 Ablauf:
- * - MCP auswählen
- * - Basispin berechnen
- * - Pin setzen
- */
-void McpManager::setPin(OutputID output, uint8_t pin, bool state)
+/* ============================================================================
+   Ausgang ausschalten
+   ============================================================================ */
+void McpManager::disableOutput(OutputID output)
 {
-    Adafruit_MCP23008& mcp = getMcp(output);
-
-    uint8_t basePin = (output % 2 == 0) ? 0 : 4;
-    mcp.digitalWrite(basePin + pin, state ? HIGH : LOW);
-
-    if (DEBUG_MCP)
+    /* Alle 4 Modus-Pins dieses Ausgangs explizit LOW setzen */
+    for (uint8_t m = 0; m < MODE_COUNT; m++)
     {
-        Serial.print("[MCP] ");
-        Serial.print(getOutputName(output));
-        Serial.print(" Pin ");
-        Serial.print(basePin + pin);
-        Serial.print(" -> ");
-        Serial.println(state ? "HIGH" : "LOW");
+        bool useMcp1;
+        uint8_t pin = resolvePin(output, (OutputMode)m, useMcp1);
+
+        (useMcp1 ? _mcp1 : _mcp2).digitalWrite(pin, LOW);
     }
 }
 
-/*
- * 📌 Beschreibung:
- * Liefert den zuständigen MCP-Baustein.
- *
- * ⚙️ Funktion:
- * - Trennung der MCPs nach Ausgang
- *
- * 🔁 Ablauf:
- * - Vergleich der OutputID
- */
-Adafruit_MCP23008& McpManager::getMcp(OutputID output)
+/* ============================================================================
+   Pin-Auflösung
+   ============================================================================ */
+uint8_t McpManager::resolvePin(OutputID output, OutputMode mode, bool& useMcp1)
 {
-    return (output < OUT_XF) ? _mcp1 : _mcp2;
+    /* MCP-Zuordnung:
+       - Erste zwei Ausgänge → MCP1
+       - Letzte zwei Ausgänge → MCP2 */
+    useMcp1 = (output < 2);
+
+    /* Jeder Ausgang nutzt 4 Pins */
+    uint8_t basePin = (output % 2) * MODE_COUNT;
+
+    /* Pin = Basis + Modus */
+    return basePin + mode;
 }

@@ -1,0 +1,19 @@
+Aktueller Stand:
+Software läuft stabil und ohne Fehler mit diesen Kriterien:
+
+Die Software kann aktuell:
+
+- MCP Ansteuerung und mapping läuft
+- StateManager läuft:
+    + immer nur ein Modus pro Ausgang
+    + Alle Ein- und Umschaltzeiten mit Sicherheitsdelay
+- Shell läuft:
+    + Alle Befehle sind in der Shell möglich
+    + Statusanzeige bei einer Änderung
+- Selftest läuft
+
+Kann noch nicht:
+
+- Interface (LCD, Touch, Web)
+- Nur MX oder XF schalten
+- Noch nicht optimiert und korrekt kommentiert

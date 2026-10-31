@@ -1,60 +1,79 @@
-/*
- * ====================================================
- * 📄 Dateiname: config.h
- * ====================================================
- *
- * 🎯 Funktion der Datei:
- * Zentrale Konfigurations- und Parameterdatei des
- * gesamten Testkoffer-Projekts.
- *
- * ⚠️ Wichtige Infos:
- * - Enthält AUSSCHLIESSLICH globale Konstanten
- * - KEINE Klassen
- * - KEINE Funktionen
- * - KEINE Logik
- * - Wird von ALLEN Modulen eingebunden
- *
- * 🧠 Konzept & Überlegungen:
- * - Alle sicherheitsrelevanten Zeiten sind zentral definiert
- * - Änderungen wirken sofort systemweit
- * - Erhöht Nachvollziehbarkeit und Wartbarkeit
- * - Verhindert "Magic Numbers" im Code
- *
- * 🔒 Sicherheitsgedanke:
- * - Safety-Delays dürfen NICHT lokal überschrieben werden
- * - Debug-Schalter sind bewusst zentral gehalten
- *
- * ====================================================
- */
+#pragma once
 
-#ifndef CONFIG_H
-#define CONFIG_H
+/* ============================================================================
+   Datei: Config.h
 
-/* 🔒 Sicherheits-Delay:
- * Zeitspanne zwischen:
- * 1) Alle Pins eines Ausgangs AUS
- * 2) Aktivieren des neuen Modus-Pins
- *
- * Zweck:
- * - Schutz von Relais
- * - Vermeidung von Kurzschlüssen
- * - Sauberes Umschalten der Spannungen
- */
+   Funktion:
+   ---------
+   Zentrale Konfigurationsdatei für globale Parameter:
+   - Serielle Kommunikation
+   - Zeitkonstanten
+   - Sicherheits-Delays
+   - Impuls- & SelfTest-Steuerung
+   - Konsistentes Tabellenlayout
+
+   Konzept:
+   --------
+   - ALLE Zeiten zentral
+   - KEINE magischen Zahlen im Code
+   - KEINE Logik in dieser Datei
+   ============================================================================ */
+
+
+/* ===================================================================== */
+/* 🔌 Serielle Schnittstelle */
+
+static const uint32_t SERIAL_BAUDRATE = 115200;
+
+
+/* ===================================================================== */
+/* 🚀 Systemstart */
+
+/// Startverzögerung nach Boot (Flash-/USB-Stabilität)
+static const uint32_t STARTUP_DELAY_MS = 2500;
+
+
+/* ===================================================================== */
+/* ⏳ Sicherheits- & Schaltzeiten */
+
+/// Kurzes Schutz-Delay beim Umschalten von Relais / Ausgängen
 static const uint32_t SAFETY_DELAY_MS = 200;
 
-/* 🔁 SelfTest-Zeiten:
- * Dauer, wie lange ein Modus aktiv bleibt
- * bevor zum nächsten gewechselt wird
- */
-static const uint32_t SELFTEST_MODE_ACTIVE_MS = 1000;
 
-/* ⏸️ Pause zwischen zwei SelfTest-Schritten */
-static const uint32_t SELFTEST_STEP_PAUSE_MS  = 300;
+/* ===================================================================== */
+/* ⚡ Impulssteuerung */
 
-/* 🐞 Debug-Schalter:
- * Aktivieren serielle Debug-Ausgaben
- */
-static const bool DEBUG_MCP   = true;
-static const bool DEBUG_STATE = true;
+/// Standarddauer für Impuls-Ausgänge
+static const uint32_t DEFAULT_IMPULSE_MS = 5000;
 
-#endif
+
+/* ===================================================================== */
+/* 🧪 SelfTest */
+
+/// Zeit, wie lange ein Modus aktiv bleibt
+static const uint32_t SELFTEST_MODE_ACTIVE_MS = 400;
+
+/// Pause zwischen zwei SelfTest-Schritten
+static const uint32_t SELFTEST_STEP_PAUSE_MS  = 200;
+
+
+/* ===================================================================== */
+/* 📊 Shell Status-Tabelle */
+
+/// Spaltenbreiten der Status-Tabelle (Shell)
+static const uint8_t TABLE_COL_OUTPUT  = 12;
+static const uint8_t TABLE_COL_MODE    = 8;
+static const uint8_t TABLE_COL_STATE   = 6;
+static const uint8_t TABLE_COL_IMPULSE = 8;
+
+
+/* ===================================================================== */
+/* 🔧 Debug / Entwicklung */
+
+/// Globale Debug-Ausgaben aktivieren (optional nutzbar)
+static const bool DEBUG_SERIAL = true;
+
+
+/* ===================================================================== */
+/* Ende der Config.h */
+/* ===================================================================== */

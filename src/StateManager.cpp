@@ -1,138 +1,147 @@
-/*
- * ====================================================
- * 📄 Dateiname: StateManager.cpp
- * ====================================================
- *
- * 🎯 Funktion der Datei:
- * Implementiert die komplette Sicherheitslogik.
- *
- * 🧠 Konzept & Überlegungen:
- * - millis() statt delay()
- * - Keine blockierenden Abläufe
- * - Deterministisches Verhalten
- *
- * ====================================================
- */
-
 #include "StateManager.h"
+#include "Config.h"
 
-/*
- * 📌 Beschreibung:
- * Initialisiert StateManager und Hardware.
- *
- * ⚙️ Funktion:
- * - Setzt alle Ausgänge in sicheren Zustand
- *
- * 🔁 Ablauf:
- * - MCP initialisieren
- * - Arrays setzen
- * - Alle Pins AUS
- */
+/* ============================================================================
+   Initialisierung
+   ============================================================================ */
 void StateManager::begin()
 {
     _mcp.begin();
+    _mcp.allOutputsOff();
 
-    for (uint8_t i = 0; i < OUTPUT_COUNT; i++)
+    for (int i = 0; i < OUTPUT_COUNT; i++)
     {
-        _currentMode[i] = MODE_24V;
-        _isOn[i] = false;
-        _waitingForSafety[i] = false;
-
-        _mcp.allPinsOff((OutputID)i);
+        _mode[i]           = MODE_24V;
+        _enabled[i]        = false;
+        _safetyPending[i]  = false;
+        _impulseActive[i]  = false;
+        _safetyStartMs[i]  = 0;
+        _impulseStartMs[i] = 0;
     }
 }
 
-/*
- * 📌 Beschreibung:
- * Zyklische Ablaufsteuerung.
- *
- * ⚙️ Funktion:
- * - Überwacht Safety-Delays
- *
- * 🔁 Ablauf:
- * - Zeit vergleichen
- * - Modus aktivieren
- */
+/* ============================================================================
+   Update
+   ============================================================================ */
 void StateManager::update()
 {
     uint32_t now = millis();
 
-    for (uint8_t i = 0; i < OUTPUT_COUNT; i++)
+    for (int i = 0; i < OUTPUT_COUNT; i++)
     {
-        if (_waitingForSafety[i])
+        /* Safety-Wartezeit abgelaufen? */
+        if (_safetyPending[i])
         {
             if (now - _safetyStartMs[i] >= SAFETY_DELAY_MS)
             {
-                _mcp.setModePin((OutputID)i, _currentMode[i], true);
-                _isOn[i] = true;
-                _waitingForSafety[i] = false;
+                _safetyPending[i] = false;
 
-                if (DEBUG_STATE)
+                if (_enabled[i])
                 {
-                    Serial.print("[STATE] ");
-                    Serial.print(getOutputName((OutputID)i));
-                    Serial.println(" EIN");
+                    _mcp.enableOutput((OutputID)i, _mode[i]);
                 }
+            }
+        }
+
+        /* Impuls abgelaufen? */
+        if (_impulseActive[i])
+        {
+            if (now - _impulseStartMs[i] >= DEFAULT_IMPULSE_MS)
+            {
+                _impulseActive[i] = false;
+                turnOff((OutputID)i);
             }
         }
     }
 }
 
-/*
- * 📌 Beschreibung:
- * Setzt den Modus eines Ausgangs.
- *
- * ⚙️ Funktion:
- * - Nur erlaubt wenn Ausgang AUS ist
- *
- * 🔁 Ablauf:
- * - Zustand prüfen
- * - Modus speichern
- */
-bool StateManager::setMode(OutputID output, OutputMode mode)
+/* ============================================================================
+   Modus setzen
+   ============================================================================ */
+void StateManager::setMode(OutputID output, OutputMode mode)
 {
-    if (_isOn[output])
-        return false;
+    int i = (int)output;
 
-    _currentMode[output] = mode;
-    return true;
+    /* Ausgang sofort ausschalten */
+    turnOff(output);
+
+    /* Modus speichern */
+    _mode[i] = mode;
 }
 
-/*
- * 📌 Beschreibung:
- * Schaltet einen Ausgang EIN.
- *
- * ⚙️ Funktion:
- * - Erzwingt Sicherheitssequenz
- *
- * 🔁 Ablauf:
- * - Alle Pins AUS
- * - Safety-Timer starten
- */
-bool StateManager::turnOn(OutputID output)
+/* ============================================================================
+   Einschalten
+   ============================================================================ */
+void StateManager::turnOn(OutputID output)
 {
-    if (_isOn[output])
-        return false;
+    int i = (int)output;
 
-    _mcp.allPinsOff(output);
-    _safetyStartMs[output] = millis();
-    _waitingForSafety[output] = true;
-
-    return true;
+    /* Ausgang vorbereiten */
+    _enabled[i]       = true;
+    _safetyPending[i]= true;
+    _safetyStartMs[i]= millis();
 }
 
-/*
- * 📌 Beschreibung:
- * Schaltet einen Ausgang AUS.
- *
- * ⚙️ Funktion:
- * - Sofortiger Reset
- *
- * 🔁 Ablauf:
- * - Alle Pins LOW
- */
+/* ============================================================================
+   Ausschalten
+   ============================================================================ */
 void StateManager::turnOff(OutputID output)
 {
-    _mcp.allPinsOff(output);
-    _isOn[output] = false;
+    int i = (int)output;
+
+    _enabled[i]       = false;
+    _safetyPending[i]= false;
+    _impulseActive[i]= false;
+
+    _mcp.disableOutput(output);
+}
+
+/* ============================================================================
+   Impuls
+   ============================================================================ */
+void StateManager::startImpulse(OutputID output)
+{
+    int i = (int)output;
+
+    turnOn(output);
+
+    _impulseActive[i]  = true;
+    _impulseStartMs[i] = millis();
+}
+
+/* ============================================================================
+   Statusabfragen
+   ============================================================================ */
+OutputMode StateManager::getMode(OutputID output) const
+{
+    return _mode[(int)output];
+}
+
+bool StateManager::isEnabled(OutputID output) const
+{
+    return _enabled[(int)output];
+}
+
+bool StateManager::isImpulseActive(OutputID output) const
+{
+    return _impulseActive[(int)output];
+}
+
+/* ============================================================================
+   Sammelbefehle
+   ============================================================================ */
+void StateManager::allOn()
+{
+    for (int i = 0; i < OUTPUT_COUNT; i++)
+    {
+        turnOn((OutputID)i);
+    }
+}
+
+void StateManager::allOff()
+{
+    for (int i = 0; i < OUTPUT_COUNT; i++)
+    {
+        turnOff((OutputID)i);
+    }
 }
