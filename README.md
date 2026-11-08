@@ -1,4 +1,4 @@
-# SE Testkoffer – Steuerung V55 (Grundaufbau)
+# SE Testkoffer – Steuerung V55
 
 Programm für die Steuerplatine «SE Testkoffer – Steuerung V2» (ESP32 LOLIN D32). Es steuert die Prüfspannungen 24 VDC, 48 VDC und 230 VAC auf die vier Ausgänge MN/MX2, MX, XF und MCH. Bedient wird der Koffer über das Touch-Display; für den Service gibt es zusätzlich eine serielle Kommandozeile.
 
@@ -52,9 +52,9 @@ SelfTest ──┘    (Regeln)          (I²C, Kontrolle, Reparatur)
 |---|---|
 | `platformio.ini` | Board, Bibliothek TFT_eSPI, Display-Konfiguration (Treiber ILI9341, Pins, SPI-Takt) |
 | `include/Config.h` | Alle festen Werte: Pins, Adressen, Zeiten, Farben |
-| `include/Outputs.h` | Ausgänge, Spannungen, Ansichten, Beschriftungen |
+| `include/Outputs.h` | Ausgänge, Spannungen, Ansichten, Beschriftungen, Zuordnungstabelle `relayPin()` |
 | `McpManager` | Einzige Stelle mit I²C-Zugriff: schreiben, zurücklesen, Störungen reparieren |
-| `StateManager` | Logik und Sicherheitsregeln R1–R7, einzige Stelle, die Relais einschaltet |
+| `StateManager` | Logik und Sicherheitsregeln R1–R8, einzige Stelle, die Relais einschaltet |
 | `DisplayUi` | Bildschirm zeichnen, Touch auswerten, Touch-Kalibrierung |
 | `Shell` | Serielle Befehle, Ereignismeldungen |
 | `SelfTest` | Relaistest (nur über die Shell) |
@@ -83,7 +83,7 @@ Nach dem Einschalten oder einem Neustart (auch durch den Watchdog) sind alle Rel
 
 ## 4. Störfestigkeit der I²C-Ansteuerung (McpManager)
 
-Bei Tests am Prototyp haben Schaltvorgänge mit 230 VAC den I²C-Bus gestört; danach schaltete kein Relais mehr. V55 begegnet dem so:
+Beim Schalten von 230 VAC können Störimpulse den I²C-Bus verfälschen oder einen MCP23008 zurücksetzen; danach würde kein Relais mehr schalten. Damit die Steuerung auch bei solchen Störungen sicher bleibt, gilt:
 
 1. **Sollzustand im Speicher.** Pro Baustein wird das ganze Byte (Register OLAT) in einem Telegramm geschrieben. Es gibt kein Lesen-Ändern-Schreiben, ein fehlerhaft gelesener Wert kann also keine Relais einschalten.
 2. **Kontrolle nach jedem Schreiben und alle 100 ms.** IODIR muss 0x00 sein und OLAT dem Sollzustand entsprechen. Ein durch Störung zurückgesetzter Baustein (IODIR = 0xFF) wird so innerhalb von 100 ms erkannt.
@@ -153,17 +153,17 @@ In der Ansicht NSX haben XF, MX und MCH (Motorantrieb MT) eine gemeinsame, über
 
 > **Selbsttest nur ohne Prüfling und ohne Testkabel!** Jeder Ausgang erhält nacheinander 24 V, 48 V und 230 V.
 
-Hinweis: Solange ein PC über USB angeschlossen ist, ist die Steuer-GND über den PC mit dem Schutzleiter verbunden. EMV-Tests deshalb ohne USB durchführen.
+Hinweise:
+
+- Solange ein PC über USB angeschlossen ist, ist die Steuer-GND über den PC mit dem Schutzleiter verbunden. EMV-Tests deshalb ohne USB durchführen.
+- Auf dem Steuerprint V2 ist VBUS des ESP32 fest mit +5 V verbunden. Vor dem Anschliessen von USB den Koffer vom Netz trennen, sonst arbeiten die 5 V vom USB und vom Schaltregler parallel.
 
 ---
 
 ## 7. Inbetriebnahme
 
-1. **Sicherung des alten Programms aufbewahren.** Die Datei `ESP32_Backup_Prototyp.bin` lässt sich bei Bedarf wieder aufspielen:
-   ```
-   pio pkg exec -p tool-esptoolpy -- esptool.py --chip esp32 --port COMx write_flash 0x0 ESP32_Backup_Prototyp.bin
-   ```
-2. **Projekt in VS Code/PlatformIO öffnen** und **24 V ausschalten**.
+1. **Projekt in VS Code/PlatformIO öffnen.**
+2. **Koffer vom Netz trennen** (Steuerspannung 24 V aus, siehe Hinweis in Kapitel 6).
 3. **USB anschliessen und hochladen** (Upload →).
 4. **Touch kalibrieren.** Beim ersten Start fordert das Display dazu auf: die Markierungen in den vier Ecken antippen. Die Werte werden gespeichert.
 5. **Selbsttest** ohne Prüfling: `selbsttest start`, dann `selbsttest ja`. Prüfen, ob jedes Relais anzieht und die Spannung an der richtigen Klemme anliegt.
@@ -177,53 +177,3 @@ Hinweis: Solange ein PC über USB angeschlossen ist, ist die Steuer-GND über de
 | Farben invertiert (Negativbild) | In `platformio.ini` `-D TFT_INVERSION_ON=1` ergänzen |
 | Bildstörungen | `SPI_FREQUENCY` auf 10000000 senken |
 | Display bleibt schwarz | Speisung 3,3 V (Pin 1, 17) und 5 V (Pin 2, 4) prüfen; Treiber ILI9341 bestätigen |
-
----
-
-## 8. Prüfstand dieser Version
-
-- Mit PlatformIO (espressif32 6.9.0, Arduino-Core 2.0.17, TFT_eSPI 2.5.43) fehlerfrei übersetzt, auch mit `-Wall -Wextra` ohne Warnungen. RAM 7,0 %, Flash 27 %.
-- Die Logik von StateManager und SelfTest wurde auf dem PC mit einem simulierten McpManager getestet:
-  - Sicherheitspause, Verriegelung (nie beide Spulen gleichzeitig), Spannungswechsel → AUS, NSX-Kopplung, Ansichtswechsel, Störungszustand und Wiederanlauf
-  - Bitbelegung der MCP und Plausibilitätsprüfung
-  - vollständiger Selbsttest (12 Relais, nie mehr als ein Relais gleichzeitig)
-  - V55: Einschalten beim Start gesperrt, Ansichtswechsel anfordern/abbrechen/bestätigen, Zeitlimit 10 s für die Shell, Sperre nach dem Selbsttest
-  - V53: Zuordnung aller 12 Relais nach der neuen Reihenfolge der Ausgänge, Ansichtswechsel (alles AUS, 24 V), NSX-Kopplung mit unabhängigem MN, Verriegelung A2/A4
-- **V53 noch nicht auf der Hardware geprüft:** neue Display-Darstellung (Bänder, Sprite, Taste MT, «Alle AUS»).
-- **Noch nicht auf der Hardware geprüft:** Display-Treiber und Farbreihenfolge, Touch-Kalibrierung, I²C-Reparatur unter realen Störungen. Der Treiber ILI9341 wurde aus der Firmware des Prototyps abgeleitet.
-
----
-
-## 9. Änderungen gegenüber V51
-
-- IO32 wird nicht mehr als Ausgang auf HIGH gesetzt. Gemäss Schema V2 (Blatt 3) und Steuerprint V2 ist IO32 mit dem Taster BTN0 des Displays (Pin 12, LCD_Button0) verbunden und nicht mit der Hintergrundbeleuchtung. Ein Ausgang mit HIGH-Pegel würde beim Betätigen des Tasters kurzgeschlossen. IO32 ist jetzt ein Eingang mit Pull-up und hat im Grundaufbau keine Funktion.
-- Die Konstante `Pins::LCD_BACKLIGHT` heisst neu `Pins::LCD_BUTTON0`.
-- Kommentare und Pintabelle ergänzt: IO39 (VN) Touch-IRQ, IO33/IO34 nicht angeschlossen, IO25–IO27 Modbus (nicht bestückt).
-- Relaiszuordnung, Sicherheitsregeln, Display-Bedienung und Shell sind unverändert.
-
----
-
-## 10. Änderungen gegenüber V52
-
-- **Reihenfolge der Ausgänge** in beiden Ansichten und in der Shell: 1 = MN/MX2, 2 = XF, 3 = MX, 4 = MCH. Die Relaiszuordnung (Tabelle `relayPin()`) ist unverändert, nur die Reihenfolge der Zeilen.
-- **Beschriftungen:** MTZ/NW/NT: MN/MX2 «Unterspg.», MCH «Motor». NSX: MN/MX2 «Unterspg.», XF «EIN (A2)», MX «AUS (A4)», MCH «Motor (B4)».
-- **NSX-Ansicht:** gemeinsame Spannungstaste MT über die drei Motorzeilen, keine Taste «Alle».
-- **Neue Taste «Alle AUS»** (gelb) in beiden Ansichten.
-- **Ansichtswechsel** setzt zusätzlich alle Spannungen auf 24 V (R6).
-- **R5** ist als Sicherheitsfunktion für die Brücke der Rückleiter im NSX-Prüfkabel dokumentiert.
-- **Flackerfreie Anzeige:** Zeichnen in fünf Bändern über einen Zwischenspeicher (Sprite); die Auswahlliste löscht den Bildschirm nicht mehr. Kann der Zwischenspeicher nicht angelegt werden, zeichnet das Programm direkt (Notbetrieb mit Flackern).
-
----
-
-## 11. Änderungen gegenüber V53
-
-- Reiter der Ansicht auffälliger: aktiver Reiter violett mit weisser Schrift, inaktiver fast schwarz mit grauer Schrift (vorher hellgrau / dunkelgrau).
-
----
-
-## 12. Änderungen gegenüber V54
-
-- **Neue Regel R8 (Prüfkabel bestätigen):** Startbildschirm «Welches Prüfkabel ist eingesteckt?» beim Einschalten und nach dem Selbsttest; Zwischenbildschirm mit «Abbrechen» / «Ja» bei jedem Ansichtswechsel. Der Wechsel schaltet sofort alles AUS; bis zur Bestätigung ist Einschalten gesperrt.
-- **Shell:** `ansicht mtz|nsx` fordert den Wechsel an, `ansicht ja` bestätigt innerhalb von 10 s, `ansicht nein` bricht ab. `status` zeigt den Zustand des Prüfkabels, Meldungen `[KABEL]` erscheinen unaufgefordert.
-- **StateManager:** neue Funktionen `requestViewChange()`, `confirmViewChange()`, `cancelViewChange()`, `chooseView()`, `requireCableConfirmation()`; `setView()` entfällt.
-- **Selbsttest:** Die Bestätigung «Prüfling und Testkabel abgehängt» gilt als Kabelauswahl; nach dem Test muss das Prüfkabel neu gewählt werden.

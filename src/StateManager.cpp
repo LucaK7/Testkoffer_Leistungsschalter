@@ -1,8 +1,8 @@
 /* ============================================================================
    Datei:   StateManager.cpp
-   Projekt: SE Testkoffer – Steuerung (Grundaufbau) V55
+   Projekt: SE Testkoffer – Steuerung V55
    ============================================================================
-   Umsetzung der Sicherheitsregeln R1–R7 (siehe StateManager.h).
+   Umsetzung der Sicherheitsregeln R1–R8 (siehe StateManager.h).
 
    Grundprinzip: Befehle ändern nur den gewünschten Zustand («requested»).
    Ausschalten wird sofort an die Hardware weitergegeben, Einschalten erst in
@@ -446,7 +446,7 @@ void StateManager::handleResult(McpManager::Result r)
     }
     else if (r == McpManager::Result::REPAIRED)
     {
-        changed();   // Display/Shell können die Fehlerstatistik aktualisieren
+        changed();   // Änderung melden; die Shell zeigt die Fehlerstatistik an
     }
 }
 

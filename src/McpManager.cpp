@@ -1,6 +1,6 @@
 /* ============================================================================
    Datei:   McpManager.cpp
-   Projekt: SE Testkoffer – Steuerung (Grundaufbau) V55
+   Projekt: SE Testkoffer – Steuerung V55
    ============================================================================
    Umsetzung der in McpManager.h beschriebenen Hardwareschicht.
    Ablauf eines Schreibvorgangs (writeOutputs):
@@ -279,8 +279,9 @@ bool McpManager::repair()
 /* ----------------------------------------------------------------------------
    recoverBus()
    Hält ein Baustein nach einer Störung die Datenleitung SDA auf LOW, ist der
-   Bus blockiert. Abhilfe nach I²C-Spezifikation: bis zu 9 Taktimpulse auf
-   SCL, bis der Baustein SDA freigibt, danach eine Stopp-Bedingung erzeugen.
+   Bus blockiert. Abhilfe nach I²C-Spezifikation (NXP UM10204, «Bus clear»):
+   9 Taktimpulse auf SCL, damit der Baustein SDA freigibt, danach eine
+   Stopp-Bedingung erzeugen.
    Die Pins werden dafür kurz von Hand (Open-Drain) angesteuert.
    ---------------------------------------------------------------------------- */
 void McpManager::recoverBus()

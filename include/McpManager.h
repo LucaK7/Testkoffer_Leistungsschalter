@@ -1,6 +1,6 @@
 /* ============================================================================
    Datei:   McpManager.h
-   Projekt: SE Testkoffer – Steuerung (Grundaufbau) V55
+   Projekt: SE Testkoffer – Steuerung V55
    ============================================================================
    Rolle im Gesamtsystem
    ----------------------------------------------------------------------------
@@ -18,13 +18,14 @@
    - Zyklische Kontrolle: Stimmen die Register noch mit dem Sollzustand?
    - Selbstständige Reparatur nach einer Störung (Bus freitakten,
      Bausteine neu initialisieren, Sollzustand neu schreiben)
-   - Fehlerstatistik für Shell und Display
+   - Fehlerstatistik für die Shell (Befehle «status» und «fehler»)
 
    Funktionsprinzip (warum so?)
    ----------------------------------------------------------------------------
    Beim Schalten von 230 VAC können Störimpulse den I²C-Bus verfälschen oder
    einen MCP23008 zurücksetzen (danach sind alle Pins Eingänge und kein
-   Relais schaltet mehr). Deshalb gilt:
+   Relais schaltet mehr). Damit die Steuerung auch bei solchen Störungen
+   sicher bleibt, gilt:
      1. Der Sollzustand wird im Speicher geführt (_target) und pro Baustein
         immer als ganzes Byte in EINEM Zugriff geschrieben. Es wird nie ein
         Wert gelesen, verändert und zurückgeschrieben – ein falsch gelesener

@@ -1,6 +1,6 @@
 /* ============================================================================
    Datei:   Shell.cpp
-   Projekt: SE Testkoffer – Steuerung (Grundaufbau) V55
+   Projekt: SE Testkoffer – Steuerung V55
    ============================================================================
    Umsetzung der seriellen Kommandozeile (siehe Befehlsliste in Shell.h).
 

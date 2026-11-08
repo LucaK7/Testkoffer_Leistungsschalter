@@ -1,6 +1,6 @@
 /* ============================================================================
    Datei:   main.cpp
-   Projekt: SE Testkoffer – Steuerung (Grundaufbau) V55
+   Projekt: SE Testkoffer – Steuerung V55
    ============================================================================
    Rolle im Gesamtsystem
    ----------------------------------------------------------------------------
@@ -31,8 +31,10 @@
    ----------------------------------------------------------------------------
    setup():
      1. McpManager zuerst: alle Relais sicher AUS (auch nach Watchdog-Neustart)
-     2. StateManager: Startzustand (MTZ/NW/NT, 24 V, alles AUS)
-     3. Display: Bild aufbauen, ggf. Touch kalibrieren (wartet auf Benutzer)
+     2. StateManager: Startzustand (MTZ/NW/NT, 24 V, alles AUS,
+        Prüfkabel noch nicht bestätigt – Einschalten gesperrt, R8)
+     3. Display: ggf. Touch kalibrieren (wartet auf Benutzer), danach
+        Startbildschirm «Prüfkabel wählen»
      4. Shell: Begrüssung
      5. Watchdog aktivieren: hängt das Programm > 5 s, startet der ESP32 neu
         und Schritt 1 schaltet alles aus.
@@ -65,10 +67,10 @@ void setup()
 {
     Serial.begin(115200);
 
-    mcp.begin();        // 1. Relais sicher AUS – so früh wie möglich
-    state.begin();      // 2. Startzustand
+    mcp.begin();        // 1. Relais sicher AUS schalten
+    state.begin();      // 2. Startzustand herstellen (MTZ/NW/NT, 24 V, alles AUS, R8)
     display.begin();    // 3. Bedienoberfläche (ggf. Touch-Kalibrierung)
-    shell.begin();      // 4. serielle Kommandozeile
+    shell.begin();      // 4. serielle Kommandozeile starten
 
     // 5. Watchdog für die Hauptschleife
     esp_task_wdt_init(Timing::WATCHDOG_S, true);   // true = Neustart bei Zeitüberschreitung

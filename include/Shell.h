@@ -1,6 +1,6 @@
 /* ============================================================================
    Datei:   Shell.h
-   Projekt: SE Testkoffer – Steuerung (Grundaufbau) V55
+   Projekt: SE Testkoffer – Steuerung V55
    ============================================================================
    Rolle im Gesamtsystem
    ----------------------------------------------------------------------------
@@ -36,6 +36,9 @@
      Selbsttest ab und schaltet alles aus.
    - Ist die USB-Verbindung am PC, ist die Steuer-GND über den PC mit dem
      Schutzleiter verbunden. Für EMV-Tests deshalb ohne USB arbeiten.
+   - Auf dem Steuerprint V2 ist VBUS des ESP32 fest mit +5 V verbunden.
+     Vor dem Anschliessen von USB muss der Koffer deshalb vom Netz getrennt
+     werden, sonst arbeiten die 5 V vom USB und vom Schaltregler parallel.
    ============================================================================ */
 
 #pragma once

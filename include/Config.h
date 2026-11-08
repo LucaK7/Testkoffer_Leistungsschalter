@@ -1,12 +1,15 @@
 /* ============================================================================
    Datei:   Config.h
-   Projekt: SE Testkoffer – Steuerung (Grundaufbau) V55
+   Projekt: SE Testkoffer – Steuerung V55
    ============================================================================
    Rolle im Gesamtsystem
    ----------------------------------------------------------------------------
    Zentrale Sammlung aller festen Werte des Programms: Pinbelegung,
    I²C-Adressen, Zeiten und Farben. Alle anderen Dateien lesen diese Werte
    nur, sie definieren keine eigenen «magischen Zahlen».
+   Ausnahmen: die Display-Pins (platformio.ini), die Bildschirmgeometrie
+   (Namensraum Layout in DisplayUi.cpp) und die Zuordnung der Relais
+   (Tabelle relayPin() in Outputs.h).
 
    Zuständigkeiten
    ----------------------------------------------------------------------------

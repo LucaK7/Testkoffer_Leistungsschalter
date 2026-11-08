@@ -1,17 +1,18 @@
 /* ============================================================================
    Datei:   SelfTest.cpp
-   Projekt: SE Testkoffer – Steuerung (Grundaufbau) V55
+   Projekt: SE Testkoffer – Steuerung V55
    ============================================================================
    Ablauf (Zustandsautomat, ein Schritt pro update()-Aufruf):
 
-     für jeden Ausgang MN/MX2, MX, XF, MCH
+     für jeden Ausgang MN/MX2, XF, MX, MCH (Reihenfolge wie auf dem Display)
        für jede Spannung 24 V, 48 V, 230 V
          SWITCH_ON : Spannung setzen, Einschalten anfordern
          WAIT_ON   : warten bis StateManager das Relais eingeschaltet hat
                      (Sicherheitspause 200 ms), max. 2 s
          HOLD_ON   : 400 ms eingeschaltet lassen
          PAUSE     : ausschalten, 300 ms warten
-   Danach: alles aus, Ansicht bleibt MTZ/NW/NT.
+   Danach: alles AUS, alle Spannungen 24 V. Das Prüfkabel muss auf dem
+   Startbildschirm neu gewählt werden (R8), erst dann ist Einschalten frei.
    ============================================================================ */
 
 #include "SelfTest.h"
@@ -128,7 +129,7 @@ void SelfTest::update()
                 _phase        = Phase::HOLD_ON;
                 _phaseStartMs = now;
             }
-            else if (elapsed > 2000)
+            else if (elapsed > 2000)   // Zeitlimit 2 s: Relais müsste nach 200 ms EIN sein
             {
                 finish("Selbsttest abgebrochen: Ausgang schaltet nicht ein");
             }

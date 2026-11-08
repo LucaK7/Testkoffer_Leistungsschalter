@@ -1,6 +1,6 @@
 /* ============================================================================
    Datei:   DisplayUi.cpp
-   Projekt: SE Testkoffer – Steuerung (Grundaufbau) V55
+   Projekt: SE Testkoffer – Steuerung V55
    ============================================================================
    Umsetzung der Bedienoberfläche (siehe Bildschirmaufbau in DisplayUi.h).
 
